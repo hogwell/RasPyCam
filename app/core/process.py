@@ -31,6 +31,55 @@ def on_sigint_sigterm(sig, frame):
 signal.signal(signal.SIGINT, on_sigint_sigterm)
 signal.signal(signal.SIGTERM, on_sigint_sigterm)
 
+ef write_to_user_config(cam, cmd_code, cmd_param):
+    """
+    Write changes made to a camera's configuration into their associated user_config file.
+    Args:
+        cam: CameraCoreModel instance.
+        cmd_code : Command to check against valid commands dict.
+        cmd_param : Parameters received from input.
+    """
+    setting = CameraCoreModel.VALID_COMMANDS[cmd_code]
+    params = cmd_param.split(" ")
+    # Update the camera's write_to_config dict, if the setting is configurable.
+    if setting:
+        # Special cases for '1s', 'fl' and 'dp', need to turn 0/1 into "true/false" strings.
+        if cmd_code == "dp":
+            if cmd_param == "0":
+                cam.write_to_config[setting] = "false"
+            else:
+                cam.write_to_config[setting] = "true"
+        elif cmd_code == "fl":
+            if cam.config["hflip"] == 1:
+                cam.write_to_config["hflip"] = "true"
+            else:
+                cam.write_to_config["hflip"] = "false"
+            if cam.config["vflip"] == 1:
+                cam.write_to_config["vflip"] = "true"
+            else:
+                cam.write_to_config["vflip"] = "false"
+        elif cmd_code == "1s":
+            if cam.solo_stream_mode:
+                cam.write_to_config["solo_stream_mode"] = "true"
+            else:
+                cam.write_to_config["solo_stream_mode"] = "false"
+        elif isinstance(setting, list):
+            # This command changes multiple settings, may have optional parameters.
+            # Populate the listed settings for as many parameters as were given.
+            for index, value in enumerate(setting):
+                if index < len(params):
+                    cam.write_to_config[value] = params[index]
+            # Special case for 'pv's optional height parameter.
+            if cmd_code == "pv":
+                cam.write_to_config["height"] = str(cam.config["preview_size"][1])
+        else:
+            cam.write_to_config[setting] = cmd_param
+
+        # Write the camera's write_to_config dict to file.
+        with open(cam.config["user_config"], "w") as uconfig:
+            for key, value in cam.write_to_config.items():
+                line = key + " " + value + "\n"
+                uconfig.write(line)
 
 def setup_fifo(path):
     """
