@@ -31,7 +31,7 @@ def on_sigint_sigterm(sig, frame):
 signal.signal(signal.SIGINT, on_sigint_sigterm)
 signal.signal(signal.SIGTERM, on_sigint_sigterm)
 
-ef write_to_user_config(cam, cmd_code, cmd_param):
+def write_to_user_config(cam, cmd_code, cmd_param):
     """
     Write changes made to a camera's configuration into their associated user_config file.
     Args:
