@@ -1,7 +1,9 @@
 import os
 import re
 import subprocess
+import sys
 import time
+from datetime import datetime
 import threading
 import signal
 
@@ -291,6 +293,114 @@ def execute_all_commands(cams, threads, cmd_tuple):
     # Update status files after command execution
     cams[CameraCoreModel.main_camera].update_status_file()
 
+def delete_ftp_files(model, ftp_url, pattern, username=None, password=None):
+    """
+    Delete files matching a wildcard pattern from an FTP site using curl.
+
+    Args:
+        model: camera model object reference
+        ftp_url: Base FTP URL (e.g., 'ftp://example.com/path/')
+        pattern: Wildcard pattern (e.g., '*.log' or 'backup_*.tar.gz')
+        username: FTP username (optional)
+        password: FTP password (optional)
+
+    Returns:
+        True if successful, False for errors
+    """
+
+    # Build curl command for listing files
+    list_cmd = ['curl', '-s']
+
+    # Add credentials if provided
+    if username and password:
+        list_cmd.extend(['-u', f'{username}:{password}'])
+    else:
+        model.print_to_logfile(f"delete_ftp_files: MISSING username and password!")
+        return False
+
+    list_cmd.append(ftp_url)
+
+    try:
+#        model.print_to_logfile(f"delete_ftp_files: {list_cmd}")
+        # Get list of files
+        result = subprocess.run(list_cmd, capture_output=True, text=True, shell=False)
+        if result.returncode != 0:
+            model.print_to_logfile(f"delete_ftp_files: Error listing files: {result.returncode}: {result.stderr}")
+            # Pass a complete command as a string to the shell.
+            list_cmd_str = ' '.join(list_cmd)
+#            model.print_to_logfile(f"delete_ftp_files: list_cmd_str: '{list_cmd_str}'")
+            result = subprocess.run(list_cmd_str, capture_output=True, text=True, shell=True)
+            if result.returncode != 0:
+                model.print_to_logfile(f"delete_ftp_files: Error shell listing files: {result.returncode}: {result.stderr}")
+                return False
+#            else:
+#                model.print_to_logfile(f"delete_ftp_files: Successful shell listing files")
+
+        # Parse filenames from curl output
+        files = result.stdout.strip().split('\n')
+#        model.print_to_logfile(f"delete_ftp_files: raw files: {files}")
+        # Extract just the filename (last token on each line)
+        filenames = []
+        for line in files:
+            if line.strip():  # Skip empty lines
+                filename = line.split()[-1]  # Get the last token
+                filenames.append(filename)
+#        model.print_to_logfile(f"delete_ftp_files: extracted filenames: {filenames}")
+        # Filter files matching the pattern
+        import fnmatch
+        matching_files = [f for f in filenames if fnmatch.fnmatch(f, pattern)]
+#        model.print_to_logfile(f"delete_ftp_files: matching_files({pattern}): {matching_files}")
+        if not matching_files:
+#            model.print_to_logfile(f"delete_ftp_files: No files found matching pattern: {pattern}")
+            return True
+#        model.print_to_logfile(f"delete_ftp_files: Found {len(matching_files)} file(s) matching '{pattern}':")
+#        for filename in matching_files:
+#            model.print_to_logfile(f"  - {filename}")
+
+        #ftp_url = "ftp://ftp.example.com/path/"
+
+#        # Get filename
+#        fname = ftp_url.rsplit('/', 1)[1]
+#        model.print_to_logfile(f"delete_ftp_files: fname: '{fname}'")
+
+        # Get base URL and file path
+        parts = ftp_url.split('/', 3)
+        base_url = parts[0] + '//' + parts[2] + '/'
+        file_path = parts[3].rsplit('/', 1)[0]
+#        model.print_to_logfile(f"delete_ftp_files: base_url: '{base_url}', file_path: '{file_path}'")
+
+        # Delete each matching file
+        deleted_count = 0
+        for filename in matching_files:
+#            delete_url = ftp_url.rstrip('/') + '/' + filename
+#            model.print_to_logfile(f"delete_ftp_files: DELETE {delete_url}")
+#            delete_cmd = ['curl', '-s', '-X', 'DELETE']
+
+            delete_cmd = ['curl', '-s']
+
+            if username and password:
+                delete_cmd.extend(['-u', f'{username}:{password}'])
+#            elif username:
+#                delete_cmd.extend(['--user', username])
+
+            delete_cmd.extend(['-Q', f'CWD /{file_path}'])
+            delete_cmd.extend(['-Q', f'DELE {filename}'])
+            delete_cmd.append(base_url)
+
+#            model.print_to_logfile(f"delete_ftp_files: {delete_cmd}")
+            result = subprocess.run(delete_cmd, capture_output=True, text=True, shell=False)
+            if result.returncode == 0:
+                model.print_to_logfile(f"File deleted: {filename}")
+                deleted_count += 1
+            else:
+                model.print_to_logfile(f"delete_ftp_files: Failed to delete: {filename}: {result.stderr}", file=sys.stderr)
+
+#        model.print_to_logfile(f"delete_ftp_files: Deleted {deleted_count}/{len(matching_files)} file(s)")
+        return deleted_count == len(matching_files)
+
+    except Exception as e:
+        model.print_to_logfile(f"delete_ftp_files: Exception: {e}", file=sys.stderr)
+        return False
 
 def execute_command(index, cams, threads, cmd_tuple):
     """
@@ -330,8 +440,39 @@ def execute_command(index, cams, threads, cmd_tuple):
         if cmd_code == "im":  # 'im' stands for "image capture"
             tl_on = model.timelapse_on
             model.timelapse_on = False
-            capture_still_image(model)
+            image_path = capture_still_image(model)
             model.timelapse_on = tl_on
+            model.print_to_logfile(f"im: '{image_path}'")
+        elif cmd_code == "if": # 'if' stands for "Image to ftp site".
+            tl_on = model.timelapse_on
+            model.timelapse_on = False
+            image_path = capture_still_image(model)
+            model.timelapse_on = tl_on
+            ##todo: ftp to the destination given by the cmd_param.
+            model.print_to_logfile(f"if: '{image_path}' params: '{cmd_param}'")
+#            ftp_server = "ftp://192.168.0.106/Pix"
+            cmd_params = cmd_param.split(" ")
+            if len(cmd_params) == 3:
+                ftp_server = cmd_params[0]
+                file_name = cmd_params[1]
+                file_ext = cmd_params[2]
+                ftp_username = "pi1"
+                ftp_password = "CCRider"
+                ftp_date = datetime.now().strftime('%Y-%m-%d')
+                #file_path = "/path/to/local/file.txt"
+                remote_file_path = f"ftp://{ftp_server}{file_name}_{ftp_date}.{file_ext}"
+                # Delete previous pictures.
+                if delete_ftp_files(model, f"ftp://{ftp_server}", f"{file_name}*", ftp_username, ftp_password):
+                    curl_command = f"curl -u {ftp_username}:{ftp_password} -T {image_path} {remote_file_path}"
+                    try:
+                        subprocess.run(curl_command, shell=True, check=True)
+                        model.print_to_logfile(f"File {remote_file_path} uploaded successfully.")
+                    except subprocess.CalledProcessError as e:
+                        model.print_to_logfile(f"Error uploading file {remote_file_path} : {e}")
+                else:
+                    model.print_to_logfile("Error deleting previous ftp image files.")
+            else:
+                model.print_to_logfile(f"Error 'if' command needs 3 arguments.")
         elif (
             cmd_code == "im+im"
         ):  # NEW COMMAND - Captures stitched image from all cameras.

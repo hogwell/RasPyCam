@@ -41,6 +41,7 @@ class CameraCoreModel:
         ],
         "pv": ["quality", "width", "divider", "height"],
         "im": None,
+        "if": ["ftp_path", "file_name", "file_ext"],
         "md": None,
         "mx": "motion_external",
         "mt": "motion_threshold",
