@@ -64,6 +64,7 @@ class CameraCoreModel:
         "ag": ["autowbgain_r", "autowbgain_b"],
         "tl": "timelapse_start_stop",
         "tv": "tl_interval",
+        "sy": ["macro_script", "args"]
     }
 
     debug_execution_time = None
@@ -1061,6 +1062,31 @@ class CameraCoreModel:
                     self.current_status = "timelapse"
                 else:
                     self.current_status = "ready"
+
+    def update_status_file(self):
+        """
+        Updates the status file with the current camera status.
+
+        Args:
+            self: CameraCoreModel instance containing the status and config.
+        """
+
+        self.set_status()
+        current_status = self.current_status  # Get the current status from the model
+        status_filepath = self.config["status_file"]  # Path to the status file
+        status_dir = os.path.dirname(
+            status_filepath
+        )  # Get the directory of the status file
+
+        # Create the status directory if it doesn't exist
+        if not os.path.exists(status_dir):
+            os.makedirs(status_dir)
+
+        # Write the current status to the status file
+        if current_status:
+            status_file = open(status_filepath, "w")
+            status_file.write(current_status)
+            status_file.close()
 
     def make_filename(self, name):
         """Generates a file name based on the given naming scheme.
