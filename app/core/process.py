@@ -456,8 +456,8 @@ def execute_command(index, cams, threads, cmd_tuple):
                 ftp_server = cmd_params[0]
                 file_name = cmd_params[1]
                 file_ext = cmd_params[2]
-                ftp_username = "pi1"
-                ftp_password = "CCRider"
+                ftp_username = "myusername"
+                ftp_password = "mypw"
                 ftp_date = datetime.now().strftime('%Y-%m-%d')
                 #file_path = "/path/to/local/file.txt"
                 remote_file_path = f"ftp://{ftp_server}{file_name}_{ftp_date}.{file_ext}"
