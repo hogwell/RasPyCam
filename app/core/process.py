@@ -14,6 +14,44 @@ from utilities.record import toggle_cam_record
 from utilities.capture import capture_still_image, capture_stitched_image
 from utilities.motion_detect import motion_detection_thread, setup_motion_pipe
 
+def parse_upw_conf(filepath='/var/www/html/upw.conf'):
+    """
+    Read the first line of a text file and parse strings formatted as 'string1:string2'.
+    
+    Args:
+        filepath (str): Path to the configuration file. Defaults to '/folder/upw.conf'.
+    
+    Returns:
+        tuple: A tuple containing (string1, string2).
+    
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the first line is malformed (doesn't contain exactly one colon).
+        EOFError: If the file is empty.
+    """
+    try:
+        with open(filepath, 'r') as file:
+            line = file.readline().strip()
+            
+            # Check if file is empty
+            if not line:
+                raise EOFError("File is empty.")
+            
+            # Split by colon
+            parts = line.split(':',maxsplit=1)
+            
+            if len(parts) != 2:
+                raise ValueError(
+                    f"First line is malformed: '{line}' "
+                    f"(expected 'string1:string2' format)"
+                )
+            
+            string1, string2 = parts
+            return (string1.strip(), string2.strip())
+    
+    except FileNotFoundError:
+        print(f"Error: File '{filepath}' not found.")
+        raise
 
 def on_sigint_sigterm(sig, frame):
     """
@@ -456,8 +494,9 @@ def execute_command(index, cams, threads, cmd_tuple):
                 ftp_server = cmd_params[0]
                 file_name = cmd_params[1]
                 file_ext = cmd_params[2]
-                ftp_username = "myusername"
-                ftp_password = "mypw"
+#                ftp_username = "myusername"
+#                ftp_password = "mypw"
+                ftp_username, ftp_password = parse_upw_conf()
                 ftp_date = datetime.now().strftime('%Y-%m-%d')
                 #file_path = "/path/to/local/file.txt"
                 remote_file_path = f"ftp://{ftp_server}{file_name}_{ftp_date}.{file_ext}"
